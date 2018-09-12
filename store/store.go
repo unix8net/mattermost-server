@@ -65,6 +65,8 @@ type Store interface {
 	UserAccessToken() UserAccessTokenStore
 	ChannelMemberHistory() ChannelMemberHistoryStore
 	Plugin() PluginStore
+	Group() GroupStore
+
 	MarkSystemRanUnitTests()
 	Close()
 	LockToMaster()
@@ -516,4 +518,20 @@ type SchemeStore interface {
 	GetAllPage(scope string, offset int, limit int) StoreChannel
 	Delete(schemeId string) StoreChannel
 	PermanentDeleteAll() StoreChannel
+}
+
+type GroupStore interface {
+	Save(group *model.Group) StoreChannel
+	Get(groupID string) StoreChannel
+	GetAllPage(offset int, limit int) StoreChannel
+	Delete(groupID string) StoreChannel
+
+	CreateMember(groupID string, userID string) StoreChannel
+	DeleteMember(groupID string, userID string) StoreChannel
+
+	SaveGroupTeam(groupTeam *model.GroupTeam) StoreChannel
+	DeleteGroupTeam(groupID string, teamID string) StoreChannel
+
+	SaveGroupChannel(groupTeam *model.GroupChannel) StoreChannel
+	DeleteGroupChannel(groupID string, channelID string) StoreChannel
 }
