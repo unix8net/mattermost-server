@@ -23,10 +23,10 @@ func TestGroupStore(t *testing.T, ss store.Store) {
 	t.Run("DeleteMember", func(t *testing.T) { testGroupDeleteMember(t, ss) })
 
 	t.Run("SaveGroupTeam", func(t *testing.T) { testSaveGroupTeam(t, ss) })
-	t.Run("DeleteGroupTeam", func(t *testing.T) { testSaveGroupTeam(t, ss) })
+	t.Run("DeleteGroupTeam", func(t *testing.T) { testDeleteGroupTeam(t, ss) })
 
-	t.Run("SaveGroupChannel", func(t *testing.T) { testSaveGroupTeam(t, ss) })
-	t.Run("DeleteGroupChannel", func(t *testing.T) { testSaveGroupTeam(t, ss) })
+	t.Run("SaveGroupChannel", func(t *testing.T) { testSaveGroupChannel(t, ss) })
+	t.Run("DeleteGroupChannel", func(t *testing.T) { testDeleteGroupChannel(t, ss) })
 }
 
 func testGroupStoreSave(t *testing.T, ss store.Store) {
@@ -526,30 +526,22 @@ func testDeleteGroupTeam(t *testing.T, ss store.Store) {
 	groupTeam := res7.Data.(*model.GroupTeam)
 
 	// Invalid GroupId
-	inv1 := model.GroupTeam(*gt1)
-	inv1.GroupId = "x"
-	res3 := <-ss.Group().SaveGroupTeam(&inv1)
-	assert.Equal(t, res3.Err.Id, "store.sql_group.delete_group_team.group_id.invalid")
+	res3 := <-ss.Group().DeleteGroupTeam("x", groupTeam.TeamId)
+	assert.Equal(t, res3.Err.Id, "store.sql_group.delete_group_team.app_error")
 
 	// Invalid TeamId
-	inv2 := model.GroupTeam(*gt1)
-	inv2.TeamId = "x"
-	res4 := <-ss.Group().SaveGroupTeam(&inv2)
-	assert.Equal(t, res4.Err.Id, "store.sql_group.delete_group_team.team_id.invalid")
+	res4 := <-ss.Group().DeleteGroupTeam(groupTeam.GroupId, "x")
+	assert.Equal(t, res4.Err.Id, "store.sql_group.delete_group_team.app_error")
 
 	// Non-existent Group
-	inv3 := model.GroupTeam(*gt1)
-	inv3.GroupId = model.NewId()
-	res5 := <-ss.Group().SaveGroupTeam(&inv3)
+	res5 := <-ss.Group().DeleteGroupTeam(model.NewId(), groupTeam.TeamId)
 	assert.Equal(t, res5.Err.Id, "store.sql_group.delete_group_team.app_error")
 
 	// Non-existent Team
-	inv4 := model.GroupTeam(*gt1)
-	inv4.TeamId = model.NewId()
-	res6 := <-ss.Group().SaveGroupTeam(&inv4)
+	res6 := <-ss.Group().DeleteGroupTeam(groupTeam.GroupId, model.NewId())
 	assert.Equal(t, res6.Err.Id, "store.sql_group.delete_group_team.app_error")
 
-	// Happy path
+	// Happy path...
 	res8 := <-ss.Group().DeleteGroupTeam(groupTeam.GroupId, groupTeam.TeamId)
 	assert.Nil(t, res8.Err)
 	d1 := res8.Data.(*model.GroupTeam)
@@ -559,11 +551,11 @@ func testDeleteGroupTeam(t *testing.T, ss store.Store) {
 	assert.Equal(t, d1.CanLeave, groupTeam.CanLeave)
 	assert.Equal(t, d1.AutoAdd, groupTeam.AutoAdd)
 	assert.Equal(t, d1.CreateAt, groupTeam.CreateAt)
-	assert.Equal(t, d1.UpdateAt, groupTeam.UpdateAt)
+	assert.Condition(t, func() bool { return d1.UpdateAt > groupTeam.UpdateAt })
 
 	// Record already deleted
 	res9 := <-ss.Group().DeleteGroupTeam(groupTeam.GroupId, groupTeam.TeamId)
-	assert.Equal(t, res9.Err.Id, "store.sql_group.delete_group_team.app_error")
+	assert.Equal(t, res9.Err.Id, "store.sql_group.delete_group_team.already_deleted")
 }
 
 func testSaveGroupChannel(t *testing.T, ss store.Store) {
@@ -655,6 +647,9 @@ func testSaveGroupChannel(t *testing.T, ss store.Store) {
 	assert.Zero(t, d1.DeleteAt)
 
 	// Update existing group team
+	res12 := <-ss.Group().GetAllPage(0, 999)
+	beforeCount := len(res12.Data.([]*model.Group))
+
 	gt1.CanLeave = false
 	gt1.AutoAdd = true
 	res7 := <-ss.Group().SaveGroupChannel(gt1)
@@ -662,6 +657,11 @@ func testSaveGroupChannel(t *testing.T, ss store.Store) {
 	d2 := res7.Data.(*model.GroupChannel)
 	assert.False(t, d2.CanLeave)
 	assert.True(t, d2.AutoAdd)
+
+	res13 := <-ss.Group().GetAllPage(0, 999)
+	afterCount := len(res13.Data.([]*model.Group))
+
+	assert.Equal(t, afterCount, beforeCount)
 
 	// Update to invalid state
 	gt1.AutoAdd = false
